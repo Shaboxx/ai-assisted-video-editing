@@ -4,6 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import shutil
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -45,7 +48,7 @@ def intervals(values, duration: float) -> list[dict]:
     return clean
 
 
-def validate_plan(plan: dict) -> None:
+def validate_plan(plan: dict, require_preview: bool = True) -> None:
     if plan.get("schema_version") != 1 or plan.get("status") != "proposed":
         raise ValueError("Only a version 1 proposed edit can be reviewed")
     duration = number(plan["source_duration_seconds"], "source_duration_seconds")
@@ -54,6 +57,64 @@ def validate_plan(plan: dict) -> None:
     intervals(plan["keep"], duration)
     if not isinstance(plan.get("source_sha256"), str) or len(plan["source_sha256"]) != 64:
         raise ValueError("Missing source SHA-256")
+    if require_preview and (not isinstance(plan.get("preview_sha256"), str)
+                            or len(plan["preview_sha256"]) != 64):
+        raise ValueError("Missing reviewed preview SHA-256")
+
+
+def validate_media(directory: Path, plan: dict) -> None:
+    if file_digest(directory / "source.mkv") != plan["source_sha256"]:
+        raise ValueError("Source media changed; generate and review a new proposal")
+    if file_digest(directory / "preview.mp4") != plan["preview_sha256"]:
+        raise ValueError("Preview media changed; generate and review a new proposal")
+
+
+@contextmanager
+def review_lock(directory: Path):
+    """Serialize CLI review operations; an interrupted update fails closed."""
+    path = directory / ".review-lock"
+    try:
+        with path.open("x", encoding="utf-8") as lock:
+            lock.write("Review operation in progress. Do not approve mixed artifacts.\n")
+    except FileExistsError as error:
+        raise ValueError("Review workspace is locked by another or interrupted operation") from error
+    state = {"release": True}
+    try:
+        yield state
+    finally:
+        if state["release"]:
+            path.unlink()
+
+
+def publish_prepared(staging: Path, directory: Path, names: tuple[str, ...], lock: dict) -> None:
+    """Publish fully validated files under the review lock; roll back on errors.
+
+    Replacements are atomic per file. The lock blocks approve/export from
+    observing an intermediate bundle. A failed rollback retains the lock.
+    """
+    backups = staging / "previous"
+    backups.mkdir()
+    existed = {}
+    for name in names:
+        existed[name] = (directory / name).is_file()
+        if existed[name]:
+            shutil.copyfile(directory / name, backups / name)
+    replaced = []
+    try:
+        for name in names:
+            os.replace(staging / name, directory / name)
+            replaced.append(name)
+    except BaseException:
+        try:
+            for name in reversed(replaced):
+                if existed[name]:
+                    os.replace(backups / name, directory / name)
+                else:
+                    (directory / name).unlink()
+        except BaseException as error:
+            lock["release"] = False
+            raise RuntimeError("Proposal rollback failed; workspace remains locked for inspection") from error
+        raise
 
 
 def validate_review(plan: dict, review: dict) -> None:

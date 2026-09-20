@@ -1,9 +1,19 @@
 """Inspectable, local review page. All displayed input is HTML escaped."""
 from html import escape
 from pathlib import Path
+import shlex
 
 
-def write_page(directory: Path, plan: dict, report: dict, ingest: dict) -> None:
+def write_page(directory: Path, plan: dict, report: dict, ingest: dict, workdir: Path | None = None) -> None:
+    # Retain the supplied nested or absolute location, never the staging folder.
+    target = (workdir if workdir is not None else directory).as_posix()
+    powershell_path = "'" + target.replace("'", "''") + "'"
+    bash_path = shlex.quote(target)
+    commands = "".join(
+        f'<p><strong>{shell}</strong></p>'
+        f'<p><code>python -m video_edit approve --workdir {escape(path)} --reviewer "Your name" --note "Reviewed timing and content"</code></p>'
+        f'<p><code>python -m video_edit export --workdir {escape(path)}</code></p>'
+        for shell, path in (("PowerShell", powershell_path), ("Bash", bash_path)))
     rows = "".join(f"<tr><td>{index + 1:02d}</td><td>{span['start']:.3f}s</td><td>{span['end']:.3f}s</td>"
                    f"<td>{span['end'] - span['start']:.3f}s</td></tr>" for index, span in enumerate(plan["keep"]))
     lineage = "".join(f"<li><strong>{escape(field)}</strong> &larr; {escape(provider)}</li>"
@@ -36,9 +46,8 @@ small,footer{{color:var(--dim)}}footer{{font-size:13px;margin-top:40px}}@media(m
 <section class="panel"><h2>Ingestion you can trace</h2><p>{ingest['input_rows']} observations → {ingest['unique_assets']} asset; {ingest['duplicate_observations']} exact duplicate removed; {len(ingest['rejected_rows'])} invalid row rejected.</p><ul>{lineage}</ul>
 <p>Conflicting non-empty metadata is retained in the conflict log. <a href="ingestion.json">Inspect all receipts</a>.</p></section></div>
 <p class="note">This is a deterministic baseline, with no selected learned model. The fixture validates timing and review mechanics. It does not measure speech quality, storytelling, engagement, or editing judgment.</p>
-<section class="panel"><h2>Review checklist</h2><p>Watch the preview with audio. Check each source interval, transitions, timing, and retained content. Approve only after reviewing; an approval is tied to the proposal hash and the original media hash.</p>
-<p><code>python -m video_edit approve --workdir {escape(directory.name)} --reviewer "Your name" --note "Reviewed timing and content"</code></p>
-<p><code>python -m video_edit export --workdir {escape(directory.name)}</code></p></section>
+<section class="panel"><h2>Review checklist</h2><p>Watch the preview with audio. Check each source interval, transitions, timing, and retained content. Approve only after reviewing; an approval is tied to the proposal, preview, and original media hashes. Run these commands from the same project directory as the original demo command.</p>
+{commands}</section>
 <footer>AI-Assisted Video Editing · Shawn Vazin · Synthetic demonstration, no external services</footer>
 </main></body></html>'''
     (directory / "review.html").write_text(html, encoding="utf-8")

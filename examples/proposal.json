@@ -33,10 +33,11 @@
     "min_silence_seconds": 0.6,
     "noise_db": -35
   },
+  "preview_sha256": "8aa684fd6ffb56cb6b5119d14037b7bb68121e5f14ac7fb1c60a395f3a66834c",
   "proposer": "deterministic-pause-tightening",
   "schema_version": 1,
   "source_asset_id": "signal-demo",
   "source_duration_seconds": 12,
-  "source_sha256": "1d809885cf2b00baf0479fdac58d036d2ba7afcace8a98d125b7ca5c5b00c451",
+  "source_sha256": "189873189c868b0d53bead4c15b93b9f2e0a55247c25d6e930cc4f7c992193c6",
   "status": "proposed"
 }

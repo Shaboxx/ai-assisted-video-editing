@@ -12,7 +12,7 @@ Asset identity hashes `(namespace, native_id)`. Observation identity hashes norm
 
 ## Proposal
 
-`proposal.json` includes schema version 1, `status: proposed`, `source_sha256`, duration, proposer label, detector parameters, and `keep`. Kept intervals must be ordered, non-overlapping, inside the source, and nonempty. At most 100 intervals are accepted. The demonstration caps declared duration at one hour; it is not a general media ingestion tool.
+`proposal.json` includes schema version 1, `status: proposed`, `source_sha256`, `preview_sha256`, duration, proposer label, detector parameters, and `keep`. Kept intervals must be ordered, non-overlapping, inside the source, and nonempty. At most 100 intervals are accepted. The demonstration caps declared duration at one hour; it is not a general media ingestion tool.
 
 The deterministic proposer stores detected pauses as well as kept ranges. Its synthetic word annotations validate boundary guards without claiming speech recognition. No selection probability or quality score is invented.
 
@@ -39,7 +39,11 @@ The source hash must match. The renderer still checks interval validity, decodes
 
 `approval.json` stores the decision, reviewer, note, UTC review time, and a SHA-256 over canonical proposal JSON. `--fixture-review` records `automated-fixture-approval`; normal use records `operator-attestation`. These are local files, not an authenticated multiuser audit log.
 
-Final export checks the approval hash and current source bytes before running FFmpeg. An edited proposal or modified source requires new review. `export.json` stores the output checksum, proposal checksum, review kind, and decoded media counts. Source media is never overwritten.
+Approval checks both media hashes. Final export checks the approval hash and current source/preview bytes, then copies the exact reviewed preview to the final output and decodes it. It does not make a potentially different re-encode after review. An edited proposal or modified source/preview requires a new proposal and review. `export.json` stores the output checksum, preview checksum, proposal checksum, review kind, and decoded media counts. Source media is never overwritten by proposing, approving, or exporting.
+
+Proposal preparation renders and decodes a temporary preview, then writes its matching JSON and HTML files in the temporary workspace. Only a fully validated bundle is published. CLI operations use an exclusive workspace lock; atomic per-file replacements are rolled back if publication fails. An invalid short clip that produces no video cannot replace any part of a previously usable review. Final export uses the same staged publication approach. A hard process interruption can leave a `.review-lock` file and the CLI fails closed; retain that folder for inspection and start a new demo in another folder rather than approving an uncertain state. This local lock does not prevent manual edits by other applications; media hashes detect those edits at approval and export.
+
+The review page supplies separate safely quoted PowerShell and Bash commands and retains the supplied nested or absolute work directory. Its commands should be run from the project directory used for the original command. Committed examples use a relative `output` directory and contain no machine-specific paths.
 
 ## Evaluation metrics
 

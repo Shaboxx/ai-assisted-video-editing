@@ -47,7 +47,7 @@ python -m video_edit demo
 Expected console output includes:
 
 ```text
-Ran 16 tests
+Ran 20 tests
 OK
 PROPOSED: 12.00s -> 6.00s; 3 kept intervals
 ```
@@ -61,7 +61,7 @@ python -m video_edit approve --reviewer "Your name" --note "Reviewed timing and 
 python -m video_edit export
 ```
 
-The final output is `output/edited.mp4`, accompanied by `approval.json` and `export.json`. Export fails before approval, after a proposal changes, or after the original source bytes change. The CLI records the operator's attestation; it cannot verify that someone actually watched the video.
+The final output is `output/edited.mp4`, accompanied by `approval.json` and `export.json`. It contains the exact approved preview bytes. Export fails before approval, after a proposal changes, or after the original source or preview bytes change. The CLI records the operator's attestation; it cannot verify that someone actually watched the video.
 
 `--workdir another-output` selects a separate run folder for every command. The demo regenerates its synthetic source; use a new folder to retain a previous review session.
 
@@ -81,7 +81,7 @@ flowchart LR
 
 - **Editing:** qualify pauses at −35 dB for at least 0.6 seconds, move cut edges out of annotated words, union overlapping removals, and discard kept slivers shorter than 0.25 seconds. FFmpeg renders the surviving intervals in source order.
 - **Ingestion:** normalize Unicode and whitespace; deduplicate by namespace and immutable native ID; retain observation hashes and field providers. The first nonempty value wins. Later conflicts remain visible; invalid rows receive rejection receipts.
-- **Review:** an approval binds to the canonical proposal SHA-256. The proposal binds to source bytes. Both are rechecked before final rendering. Previews remain explicitly proposed.
+- **Review:** an approval binds to the canonical proposal SHA-256. The proposal binds to source and preview bytes. These are rechecked before copying the reviewed preview to final output. A replacement proposal is rendered and decoded in a temporary workspace before its complete review bundle is published. Failed preparation preserves the previous review; failed publication rolls back under an exclusive CLI lock.
 - **Execution:** one subprocess boundary uses argument arrays, fixed codecs, and a timeout. No shell interpolation, external API calls, or remote fetching occurs in the demo.
 
 Implementation: [`editing.py`](video_edit/editing.py), [`ingest.py`](video_edit/ingest.py), [`contracts.py`](video_edit/contracts.py), and [`media.py`](video_edit/media.py).
@@ -101,7 +101,7 @@ These metrics use the known source-coordinate annotations. The preview is also f
 
 The fixture proves pause detection, timing transformations, normalization, and approval enforcement. It does not establish quality on conversation, noisy recordings, music, multilingual speech, narrative coherence, or arbitrary user videos. Long pauses can be meaningful. Word-edge guards rely on valid timestamps and do not make erroneous silence detections safe. This CLI is intentionally fixture-focused; adapting it to arbitrary media requires duration probing and a timestamp source.
 
-The [tests](tests/test_pipeline.py) cover overlapping pauses, boundary protection, tiny slivers, all-silence input, bad timestamps, duplicate replay, field lineage, actual FFmpeg rendering, unapproved export rejection, stale approvals, and changed source bytes. [CI](.github/workflows/ci.yml) runs the example and marks its export approval as **automated fixture approval**, never human review.
+The [tests](tests/test_pipeline.py) cover overlapping pauses, boundary protection, tiny slivers, all-silence input, bad timestamps, duplicate replay, field lineage, actual FFmpeg rendering, unapproved export rejection, stale approvals, changed source/preview bytes, failed-proposal preservation, publication rollback, and review commands for nested or absolute output folders. [CI](.github/workflows/ci.yml) runs the example and marks its export approval as **automated fixture approval**, never human review.
 
 ## Optional external proposals
 

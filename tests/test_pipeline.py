@@ -1,13 +1,17 @@
 import copy
+import os
 import tempfile
 import unittest
+from html import unescape
 from pathlib import Path
+from unittest.mock import patch
 
 from video_edit import media
 from video_edit.__main__ import ROOT, approve, export, propose
 from video_edit.contracts import digest, file_digest, intervals, read_json, validate_review, write_json
 from video_edit.editing import parse_silences, tighten
 from video_edit.ingest import normalize
+from video_edit.report import write_page
 
 
 class TimingTests(unittest.TestCase):
@@ -81,6 +85,17 @@ class IngestTests(unittest.TestCase):
 
 
 class MediaIntegrationTests(unittest.TestCase):
+    def prepare(self, directory):
+        fixture = read_json(ROOT / "fixtures" / "timing.json")
+        write_json(directory / "ingestion.json", normalize(read_json(ROOT / "fixtures" / "observations.json")))
+        media.generate_source(directory, fixture)
+        propose(directory)
+        return read_json(directory / "proposal.json")
+
+    def snapshot(self, directory):
+        return {name: file_digest(directory / name) for name in
+                ("preview.mp4", "proposal.json", "report.json", "review.html", "approval.json")}
+
     def test_real_media_review_and_stale_approval(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -99,6 +114,7 @@ class MediaIntegrationTests(unittest.TestCase):
             approve(directory, "CI fixture", "Automated wiring check, not human review", fixture_review=True)
             export(directory)
             self.assertTrue((directory / "edited.mp4").is_file())
+            self.assertEqual(file_digest(directory / "edited.mp4"), file_digest(directory / "preview.mp4"))
             self.assertEqual(before, file_digest(directory / "source.mkv"))
             self.assertEqual(read_json(directory / "export.json")["review_kind"], "automated-fixture-approval")
             plan = read_json(directory / "proposal.json")
@@ -120,6 +136,73 @@ class MediaIntegrationTests(unittest.TestCase):
             write_json(suggestions, {"source_sha256": "0" * 64, "keep": [{"start": 0, "end": 1}]})
             with self.assertRaisesRegex(ValueError, "exact source"):
                 propose(directory, suggestions)
+
+    def test_failed_proposal_preserves_entire_approved_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            plan = self.prepare(directory)
+            approve(directory, "CI fixture", "Automated fixture review", fixture_review=True)
+            before = self.snapshot(directory)
+            suggestions = directory / "external.json"
+            # This interval contains audio but no video frame: the reported bug.
+            write_json(suggestions, {"source_sha256": plan["source_sha256"],
+                                     "keep": [{"start": 0.001, "end": 0.002}]})
+            with self.assertRaises((RuntimeError, ValueError)):
+                propose(directory, suggestions)
+            self.assertEqual(before, self.snapshot(directory))
+            self.assertFalse((directory / ".review-lock").exists())
+            self.assertFalse(list(directory.glob(".proposal-*")))
+            export(directory)  # Prior approval and matching preview still work.
+
+    def test_changed_preview_rejected_at_approval_and_export(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            plan = self.prepare(directory)
+            self.assertEqual(plan["preview_sha256"], file_digest(directory / "preview.mp4"))
+            approve(directory, "CI fixture", "Automated fixture review", fixture_review=True)
+            with (directory / "preview.mp4").open("ab") as handle:
+                handle.write(b"swapped-preview")
+            with self.assertRaisesRegex(ValueError, "Preview media changed"):
+                approve(directory, "CI fixture", "Attempted stale review", fixture_review=True)
+            with self.assertRaisesRegex(ValueError, "Preview media changed"):
+                export(directory)
+
+    def test_partial_publication_error_rolls_back_review_bundle(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            plan = self.prepare(directory)
+            approve(directory, "CI fixture", "Automated fixture review", fixture_review=True)
+            before = self.snapshot(directory)
+            suggestions = directory / "external.json"
+            write_json(suggestions, {"source_sha256": plan["source_sha256"],
+                                     "keep": [{"start": 0, "end": 2}]})
+            original_replace = os.replace
+            calls = 0
+
+            def fail_second_replace(source, destination):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    raise OSError("Simulated second-file publication failure")
+                return original_replace(source, destination)
+
+            with patch("video_edit.contracts.os.replace", side_effect=fail_second_replace):
+                with self.assertRaisesRegex(OSError, "second-file"):
+                    propose(directory, suggestions)
+            self.assertEqual(before, self.snapshot(directory))
+            self.assertFalse((directory / ".review-lock").exists())
+            export(directory)
+
+    def test_review_commands_preserve_nested_and_absolute_workdirs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            plan = self.prepare(directory)
+            report, ingest = read_json(directory / "report.json"), read_json(directory / "ingestion.json")
+            for target in (Path("nested") / "review run", directory / "nested review"):
+                write_page(directory, plan, report, ingest, workdir=target)
+                page = unescape((directory / "review.html").read_text(encoding="utf-8"))
+                self.assertIn("--workdir '" + target.as_posix() + "'", page)
+                self.assertNotIn(".proposal-", page)
 
 
 if __name__ == "__main__":

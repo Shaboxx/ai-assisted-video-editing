@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from .contracts import digest, file_digest, read_json, validate_plan, validate_review, write_json
+from .contracts import (digest, file_digest, publish_prepared, read_json, review_lock,
+                        validate_media, validate_plan, validate_review, write_json)
 from .editing import overlap, parse_silences, tighten
 from .ingest import normalize
 from . import media
@@ -35,6 +38,11 @@ def evaluate(plan: dict, fixture: dict, decoded: dict) -> dict:
 
 
 def propose(directory: Path, suggestions: Path | None = None) -> None:
+    with review_lock(directory) as lock:
+        _prepare_proposal(directory, suggestions, lock)
+
+
+def _prepare_proposal(directory: Path, suggestions: Path | None, lock: dict) -> None:
     fixture = read_json(ROOT / "fixtures" / "timing.json")
     silences = parse_silences(media.detect_silence(directory / "source.mkv"), fixture["duration_seconds"])
     plan = {"schema_version": 1, "status": "proposed", "source_asset_id": "signal-demo",
@@ -51,29 +59,46 @@ def propose(directory: Path, suggestions: Path | None = None) -> None:
         plan["keep"] = external["keep"]
         plan["proposer"] = "external-proposal; unverified model or human input"
         plan["parameters"] = {}
-    validate_plan(plan)
-    media.render(directory / "source.mkv", plan["keep"], directory / "preview.mp4")
-    decoded = media.inspect_output(directory / "preview.mp4")
-    report = evaluate(plan, fixture, decoded)
-    expected_duration = report["planned_output_seconds"]
-    if abs(decoded["decoded_video_seconds"] - expected_duration) > 1 / fixture["fps"] + 0.001:
-        raise ValueError("Rendered duration differs from the edit plan by more than one frame")
-    if decoded["decoded_audio_samples"] == 0:
-        raise ValueError("Rendered output has no decoded audio")
-    write_json(directory / "proposal.json", plan)
-    write_json(directory / "report.json", report)
-    write_page(directory, plan, report, read_json(directory / "ingestion.json"))
+    validate_plan(plan, require_preview=False)
+    # Nothing in the published review changes until every new artifact is ready.
+    with TemporaryDirectory(prefix=".proposal-", dir=directory) as temporary:
+        staging = Path(temporary)
+        media.render(directory / "source.mkv", plan["keep"], staging / "preview.mp4")
+        decoded = media.inspect_output(staging / "preview.mp4")
+        report = evaluate(plan, fixture, decoded)
+        expected_duration = report["planned_output_seconds"]
+        if decoded["decoded_video_frames"] <= 0:
+            raise ValueError("Rendered output has no decoded video")
+        if abs(decoded["decoded_video_seconds"] - expected_duration) > 1 / fixture["fps"] + 0.001:
+            raise ValueError("Rendered duration differs from the edit plan by more than one frame")
+        if decoded["decoded_audio_samples"] == 0:
+            raise ValueError("Rendered output has no decoded audio")
+        plan["preview_sha256"] = file_digest(staging / "preview.mp4")
+        validate_plan(plan)
+        report["preview_sha256"] = plan["preview_sha256"]
+        report["plan_sha256"] = digest(plan)
+        write_json(staging / "proposal.json", plan)
+        write_json(staging / "report.json", report)
+        write_page(staging, plan, report, read_json(directory / "ingestion.json"), workdir=directory)
+        if file_digest(directory / "source.mkv") != plan["source_sha256"]:
+            raise ValueError("Source media changed while preparing the proposal")
+        publish_prepared(staging, directory,
+                         ("preview.mp4", "proposal.json", "report.json", "review.html"), lock)
     print(f"PROPOSED: {fixture['duration_seconds']:.2f}s -> {expected_duration:.2f}s; {len(plan['keep'])} kept intervals")
     print(f"Review {directory / 'review.html'} before approving and exporting.")
 
 
 def approve(directory: Path, reviewer: str, note: str, fixture_review: bool = False) -> None:
+    with review_lock(directory):
+        _approve(directory, reviewer, note, fixture_review)
+
+
+def _approve(directory: Path, reviewer: str, note: str, fixture_review: bool) -> None:
     plan = read_json(directory / "proposal.json")
     validate_plan(plan)
     if not reviewer.strip() or not note.strip():
         raise ValueError("Reviewer and review note must be non-empty")
-    if file_digest(directory / "source.mkv") != plan["source_sha256"]:
-        raise ValueError("Source media changed; generate and review a new proposal")
+    validate_media(directory, plan)
     receipt = {"schema_version": 1, "decision": "approved", "reviewer": reviewer.strip(), "note": note.strip(),
                "review_kind": "automated-fixture-approval" if fixture_review else "operator-attestation",
                "plan_sha256": digest(plan), "reviewed_at": datetime.now(timezone.utc).isoformat()}
@@ -82,18 +107,31 @@ def approve(directory: Path, reviewer: str, note: str, fixture_review: bool = Fa
 
 
 def export(directory: Path) -> None:
+    with review_lock(directory) as lock:
+        _export(directory, lock)
+
+
+def _export(directory: Path, lock: dict) -> None:
     plan = read_json(directory / "proposal.json")
     if not (directory / "approval.json").is_file():
         raise ValueError("Final export requires an explicit approval; inspect review.html first")
     review = read_json(directory / "approval.json")
     validate_review(plan, review)
-    if file_digest(directory / "source.mkv") != plan["source_sha256"]:
-        raise ValueError("Source media changed; approval is no longer valid")
+    validate_media(directory, plan)
     destination = directory / "edited.mp4"
-    media.render(directory / "source.mkv", plan["keep"], destination)
-    write_json(directory / "export.json", {"file": destination.name, "sha256": file_digest(destination),
-               "plan_sha256": digest(plan), "review_kind": review["review_kind"],
-               "decoded_output": media.inspect_output(destination)})
+    with TemporaryDirectory(prefix=".export-", dir=directory) as temporary:
+        staging = Path(temporary)
+        # Export the exact reviewed artifact, avoiding a different re-encode.
+        shutil.copyfile(directory / "preview.mp4", staging / "edited.mp4")
+        decoded = media.inspect_output(staging / "edited.mp4")
+        validate_media(directory, plan)
+        if file_digest(staging / "edited.mp4") != plan["preview_sha256"]:
+            raise ValueError("Preview changed during export; review again")
+        write_json(staging / "export.json", {"file": destination.name,
+                   "sha256": file_digest(staging / "edited.mp4"),
+                   "plan_sha256": digest(plan), "preview_sha256": plan["preview_sha256"],
+                   "review_kind": review["review_kind"], "decoded_output": decoded})
+        publish_prepared(staging, directory, ("edited.mp4", "export.json"), lock)
     print(f"EXPORTED: {destination}; review kind: {review['review_kind']}")
 
 
@@ -122,7 +160,7 @@ def main() -> None:
             approve(args.workdir, args.reviewer, args.note, args.fixture_review)
         else:
             export(args.workdir)
-    except (ValueError, FileNotFoundError, KeyError, RuntimeError) as error:
+    except (ValueError, OSError, KeyError, RuntimeError) as error:
         parser.exit(2, f"error: {error}\n")
 
 

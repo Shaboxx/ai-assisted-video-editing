@@ -94,6 +94,7 @@ def generate_source(directory: Path, fixture: dict) -> None:
 
 def encoding() -> list[str]:
     return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+            "-r", "12", "-fps_mode", "cfr",
             "-c:a", "aac", "-b:a", "64k", "-map_metadata", "-1", "-threads", "1", "-movflags", "+faststart"]
 
 

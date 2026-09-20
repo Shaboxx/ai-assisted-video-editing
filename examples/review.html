@@ -26,8 +26,7 @@ small,footer{color:var(--dim)}footer{font-size:13px;margin-top:40px}@media(max-w
 <section class="panel"><h2>Ingestion you can trace</h2><p>5 observations → 1 asset; 1 exact duplicate removed; 1 invalid row rejected.</p><ul><li><strong>duration_seconds</strong> &larr; probe</li><li><strong>title</strong> &larr; manifest</li></ul>
 <p>Conflicting non-empty metadata is retained in the conflict log. <a href="ingestion.json">Inspect all receipts</a>.</p></section></div>
 <p class="note">This is a deterministic baseline, with no selected learned model. The fixture validates timing and review mechanics. It does not measure speech quality, storytelling, engagement, or editing judgment.</p>
-<section class="panel"><h2>Review checklist</h2><p>Watch the preview with audio. Check each source interval, transitions, timing, and retained content. Approve only after reviewing; an approval is tied to the proposal hash and the original media hash.</p>
-<p><code>python -m video_edit approve --workdir output --reviewer "Your name" --note "Reviewed timing and content"</code></p>
-<p><code>python -m video_edit export --workdir output</code></p></section>
+<section class="panel"><h2>Review checklist</h2><p>Watch the preview with audio. Check each source interval, transitions, timing, and retained content. Approve only after reviewing; an approval is tied to the proposal, preview, and original media hashes. Run these commands from the same project directory as the original demo command.</p>
+<p><strong>PowerShell</strong></p><p><code>python -m video_edit approve --workdir &#x27;output&#x27; --reviewer "Your name" --note "Reviewed timing and content"</code></p><p><code>python -m video_edit export --workdir &#x27;output&#x27;</code></p><p><strong>Bash</strong></p><p><code>python -m video_edit approve --workdir output --reviewer "Your name" --note "Reviewed timing and content"</code></p><p><code>python -m video_edit export --workdir output</code></p></section>
 <footer>AI-Assisted Video Editing · Shawn Vazin · Synthetic demonstration, no external services</footer>
 </main></body></html>
