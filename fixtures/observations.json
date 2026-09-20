@@ -1,0 +1,7 @@
+[
+  {"namespace":" Local ","native_id":"signal-demo","provider":"manifest","title":"  Signal   and pause fixture ","duration_seconds":null},
+  {"namespace":"local","native_id":"signal-demo","provider":"probe","title":"","duration_seconds":12},
+  {"namespace":"local","native_id":"signal-demo","provider":"probe","title":"","duration_seconds":12},
+  {"namespace":"local","native_id":"signal-demo","provider":"notes","title":"Alternative label","duration_seconds":12},
+  {"namespace":"local","native_id":"invalid","provider":"probe","title":"Invalid duration example","duration_seconds":-1}
+]
