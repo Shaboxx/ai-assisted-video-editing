@@ -1,0 +1,35 @@
+name: Offline demonstration
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python -m video_edit demo
+      - name: Confirm unapproved final export is rejected
+        run: |
+          if python -m video_edit export; then
+            echo 'Unapproved export unexpectedly succeeded'
+            exit 1
+          fi
+      - name: Exercise final export with an explicitly automated fixture approval
+        run: |
+          python -m video_edit approve --reviewer 'CI fixture' --note 'Automated wiring check; not human review' --fixture-review
+          python -m video_edit export
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-edit-review
+          path: |
+            output/review.html
+            output/source-preview.mp4
+            output/preview.mp4
+            output/edited.mp4
+            output/*.json
