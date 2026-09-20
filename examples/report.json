@@ -1,0 +1,27 @@
+{
+  "baseline": {
+    "output_seconds": 12,
+    "policy": "no cuts",
+    "remaining_silence_seconds": 6,
+    "signal_retention": 1.0
+  },
+  "decoded_output": {
+    "audio_sample_rate": 16000,
+    "decoded_audio_samples": 96256,
+    "decoded_video_frames": 72,
+    "decoded_video_seconds": 6.0
+  },
+  "duration_reduction_fraction": 0.500011,
+  "evaluation_kind": "synthetic timing integration check; not model quality",
+  "ffmpeg": "ffmpeg version 7.1-essentials_build-www.gyan.dev",
+  "fixture_id": "signal-and-pause-v1",
+  "imageio_ffmpeg": "0.6.0",
+  "planned_output_seconds": 5.999874,
+  "policy": "deterministic-pause-tightening",
+  "remaining_silence_seconds": 0.0,
+  "signal_retention": 0.999979,
+  "source_seconds": 12,
+  "status": "proposed; no approval claimed",
+  "timing_tolerance_seconds": 0.08333333333333333,
+  "trained_model": "none selected"
+}

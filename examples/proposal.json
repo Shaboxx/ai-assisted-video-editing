@@ -1,0 +1,42 @@
+{
+  "detected_silences": [
+    {
+      "end": 4.000063,
+      "start": 2.0
+    },
+    {
+      "end": 8.000063,
+      "start": 6.0
+    },
+    {
+      "end": 12.0,
+      "start": 10.0
+    }
+  ],
+  "fixture_sha256": "9bac67356d82d59ec6d9aa97947f1b8b2a126299b77acae5a4da4f40b5ca7782",
+  "keep": [
+    {
+      "end": 2.0,
+      "start": 0.0
+    },
+    {
+      "end": 6.0,
+      "start": 4.000063
+    },
+    {
+      "end": 10.0,
+      "start": 8.000063
+    }
+  ],
+  "parameters": {
+    "min_keep_seconds": 0.25,
+    "min_silence_seconds": 0.6,
+    "noise_db": -35
+  },
+  "proposer": "deterministic-pause-tightening",
+  "schema_version": 1,
+  "source_asset_id": "signal-demo",
+  "source_duration_seconds": 12,
+  "source_sha256": "1d809885cf2b00baf0479fdac58d036d2ba7afcace8a98d125b7ca5c5b00c451",
+  "status": "proposed"
+}

@@ -1,0 +1,47 @@
+{
+  "duplicate_observations": 1,
+  "input_rows": 5,
+  "merged_observations": 2,
+  "records": [
+    {
+      "asset_id": "d6e06a361509c499b21a3512",
+      "conflicts": [
+        {
+          "field": "title",
+          "kept": "Signal and pause fixture",
+          "observed": "Alternative label",
+          "provider": "notes"
+        }
+      ],
+      "duration_seconds": 12.0,
+      "field_sources": {
+        "duration_seconds": "probe",
+        "title": "manifest"
+      },
+      "namespace": "local",
+      "native_id": "signal-demo",
+      "observations": [
+        {
+          "observation_sha256": "51a4541a024b005f791f128b76a63deb05608ebeba86de2d3ebc41fe3a25cd30",
+          "provider": "manifest"
+        },
+        {
+          "observation_sha256": "d6ac7b1cdff9f6ad52d8d9f70c1e794384d36ea2b20dbd8e0e27fba9653e75d2",
+          "provider": "probe"
+        },
+        {
+          "observation_sha256": "1f36f67af0a8d9133b30d0760be1d2ca88fa92b14a27667678b11d2d3b66155a",
+          "provider": "notes"
+        }
+      ],
+      "title": "Signal and pause fixture"
+    }
+  ],
+  "rejected_rows": [
+    {
+      "reason": "Duration must be positive",
+      "row": 5
+    }
+  ],
+  "unique_assets": 1
+}
